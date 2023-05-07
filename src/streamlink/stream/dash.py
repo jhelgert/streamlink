@@ -196,7 +196,7 @@ class DASHStream(Stream):
         session: Streamlink,
         mpd: MPD,
         video_representation: Optional[Representation] = None,
-        audio_representation: Optional[Representation] = None,
+        audio_representations: Optional[List[Representation]] = None,
         **args,
     ):
         """
@@ -210,7 +210,7 @@ class DASHStream(Stream):
         super().__init__(session)
         self.mpd = mpd
         self.video_representation = video_representation
-        self.audio_representation = audio_representation
+        self.audio_representations = audio_representations
         self.args = args
 
     def __json__(self):
@@ -282,14 +282,15 @@ class DASHStream(Stream):
         except Exception as err:
             raise PluginError(f"Failed to parse MPD manifest: {err}") from err
 
+        audio_select = session.options.get("dash-audio-select") or []
         source = mpd_params.get("url", "MPD manifest")
         video: List[Optional[Representation]] = []
         audio: List[Optional[Representation]] = []
 
         # Search for suitable video and audio representations
         for aset in mpd.periods[period].adaptationSets:
-            if aset.contentProtections:
-                raise PluginError(f"{source} is protected by DRM")
+            #if aset.contentProtections:
+            #    raise PluginError(f"{source} is protected by DRM")
             for rep in aset.representations:
                 if rep.contentProtections:
                     raise PluginError(f"{source} is protected by DRM")
@@ -306,6 +307,7 @@ class DASHStream(Stream):
         locale = session.localization
         locale_lang = locale.language
         lang = None
+        langs = None
         available_languages = set()
 
         # if the locale is explicitly set, prefer that language over others
@@ -316,27 +318,31 @@ class DASHStream(Stream):
                     if locale.explicit and aud.lang and Language.get(aud.lang) == locale_lang:
                         lang = aud.lang
 
-        if not lang:
+        if not lang and '*' not in audio_select:
             # filter by the first language that appears
-            lang = audio[0].lang if audio[0] else None
+            langs = [audio[0].lang if audio[0] else None]
+
+        if audio_select and '*' not in audio_select:
+            langs = [aud.lang for aud in audio if aud.lang in audio_select]
 
         log.debug(
-            f"Available languages for DASH audio streams: {', '.join(available_languages) or 'NONE'} (using: {lang or 'n/a'})",
+            f"Available languages for DASH audio streams: {', '.join(available_languages) or 'NONE'} (using: {langs or 'n/a'})",
         )
 
         # if the language is given by the stream, filter out other languages that do not match
-        if len(available_languages) > 1:
-            audio = [a for a in audio if a and (a.lang is None or a.lang == lang)]
+        if len(available_languages) > 1 and '*' not in audio_select:
+            audio = [a for a in audio if a and (a.lang is None or a.lang in langs)]
 
         ret = []
-        for vid, aud in itertools.product(video, audio):
-            stream = DASHStream(session, mpd, vid, aud, **args)
+        for vid in video:
+            stream = DASHStream(session, mpd, vid, audio, **args)
             stream_name = []
 
             if vid:
                 stream_name.append(f"{vid.height or vid.bandwidth_rounded:0.0f}{'p' if vid.height else 'k'}")
-            if aud and len(audio) > 1:
-                stream_name.append(f"a{aud.bandwidth:0.0f}k")
+            if audio and len(audio) > 1:
+                for aud in audio:
+                    stream_name.append(f"a{aud.bandwidth:0.0f}k")
             ret.append(("+".join(stream_name), stream))
 
         # rename duplicate streams
@@ -347,8 +353,8 @@ class DASHStream(Stream):
         def sortby_bandwidth(dash_stream: DASHStream) -> float:
             if dash_stream.video_representation:
                 return dash_stream.video_representation.bandwidth
-            if dash_stream.audio_representation:
-                return dash_stream.audio_representation.bandwidth
+            if dash_stream.audio_representations:
+                return max(aud.bandwidth for aud in dash_stream.audio_representations)
             return 0  # pragma: no cover
 
         ret_new = {}
@@ -370,7 +376,7 @@ class DASHStream(Stream):
 
     def open(self):
         video, audio = None, None
-        rep_video, rep_audio = self.video_representation, self.audio_representation
+        rep_video = self.video_representation
 
         timestamp = now()
 
@@ -379,13 +385,16 @@ class DASHStream(Stream):
             log.debug(f"Opening DASH reader for: {rep_video.ident!r} - {rep_video.mimeType}")
             video.open()
 
-        if rep_audio:
-            audio = DASHStreamReader(self, rep_audio, timestamp)
+        audio = []
+        for rep_audio in self.audio_representations:
+            aud = DASHStreamReader(self, rep_audio, timestamp)
             log.debug(f"Opening DASH reader for: {rep_audio.ident!r} - {rep_audio.mimeType}")
-            audio.open()
+            aud.open()
+            audio.append(aud)
 
         if video and audio:
-            return FFMPEGMuxer(self.session, video, audio, copyts=True).open()
+            video_audio_maps = ["0:v"] + [f"{idx}:a" for idx, _ in enumerate(audio, start=1)]
+            return FFMPEGMuxer(self.session, video, *audio, copyts=True, maps=video_audio_maps).open()
         elif video:
             return video
         elif audio:

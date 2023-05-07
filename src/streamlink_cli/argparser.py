@@ -920,6 +920,7 @@ def build_parser():
         """,
     )
 
+
     transport_hls.add_argument(
         "--hls-live-edge",
         type=num(int, ge=1),
@@ -1069,6 +1070,26 @@ def build_parser():
         Default is 3.
         """,
     )
+    transport_dash.add_argument(
+        "--dash-audio-select",
+        type=comma_list,
+        metavar="CODE",
+        help="""
+        Selects a specific audio source or sources, by language code or name,
+        when multiple audio sources are available. Can be `*` (asterisk) to download all
+        audio sources.
+
+        Examples:
+
+          --dash-audio-select "en,de"
+          --dash-audio-select "org"
+          --dash-audio-select "*"
+
+        Note: This is only useful in special circumstances where the regular
+        locale option fails, such as when multiple sources of the same language
+        exists or when the language is not set inside the manifest, i.e. 'org'.
+        """
+    )
 
     transport_hls.add_argument("--hls-segment-attempts", help=argparse.SUPPRESS)
     transport_hls.add_argument("--hls-segment-threads", help=argparse.SUPPRESS)
@@ -1076,6 +1097,15 @@ def build_parser():
     transport_hls.add_argument("--hls-timeout", help=argparse.SUPPRESS)
     transport.add_argument("--http-stream-timeout", help=argparse.SUPPRESS)
 
+    transport_ffmpeg.add_argument(
+         "--ffmpeg-dkey",
+         type=str,
+         metavar="DKEY",
+         help="""
+         Set the decryption key
+
+         """
+     )
     transport_ffmpeg.add_argument(
         "--ffmpeg-ffmpeg",
         metavar="FILENAME",
@@ -1313,7 +1343,9 @@ _ARGUMENT_TO_SESSIONOPTION: List[Tuple[str, str, Optional[Callable[[Any], Any]]]
     ("hls_segment_ignore_names", "hls-segment-ignore-names", None),
     ("hls_segment_key_uri", "hls-segment-key-uri", None),
     ("hls_audio_select", "hls-audio-select", None),
+    ("dash_audio_select", "dash-audio-select", None),
     ("dash_manifest_reload_attempts", "dash-manifest-reload-attempts", None),
+    ("ffmpeg_dkey", "ffmpeg-dkey", None),
     ("ffmpeg_ffmpeg", "ffmpeg-ffmpeg", None),
     ("ffmpeg_no_validation", "ffmpeg-no-validation", None),
     ("ffmpeg_verbose", "ffmpeg-verbose", None),
