@@ -1102,10 +1102,28 @@ def build_parser():
          type=str,
          metavar="DKEY",
          help="""
-         Set the decryption key
+         Set the decryption key for video and audio
 
          """
-     )
+    )
+    transport_ffmpeg.add_argument(
+         "--ffmpeg-dkey-video",
+         type=str,
+         metavar="DKEY_V",
+         help="""
+         Set the decryption key for video track
+
+         """
+    )
+    transport_ffmpeg.add_argument(
+         "--ffmpeg-dkey-audio",
+         type=str,
+         metavar="DKEY_A",
+         help="""
+         Set the decryption key for audio track(s)
+
+         """
+    )
     transport_ffmpeg.add_argument(
         "--ffmpeg-ffmpeg",
         metavar="FILENAME",
@@ -1346,6 +1364,8 @@ _ARGUMENT_TO_SESSIONOPTION: List[Tuple[str, str, Optional[Callable[[Any], Any]]]
     ("dash_audio_select", "dash-audio-select", None),
     ("dash_manifest_reload_attempts", "dash-manifest-reload-attempts", None),
     ("ffmpeg_dkey", "ffmpeg-dkey", None),
+    ("ffmpeg_dkey_video", "ffmpeg-dkey-video", None),
+    ("ffmpeg_dkey_audio", "ffmpeg-dkey-audio", None),
     ("ffmpeg_ffmpeg", "ffmpeg-ffmpeg", None),
     ("ffmpeg_no_validation", "ffmpeg-no-validation", None),
     ("ffmpeg_verbose", "ffmpeg-verbose", None),
